@@ -1,0 +1,19 @@
+# Image de base : Docker Official Image — Spark avec Python 3
+# https://hub.docker.com/_/spark
+# Le tag "python3" est le alias stable maintenu par Apache/Docker qui pointe
+# vers la dernière version 3.x avec support Python.
+
+FROM spark:3.5.3-scala2.12-java11-python3-ubuntu
+
+USER root
+
+# Installer kafka-python pour que spark-submit puisse importer kafka
+# (utilisé uniquement par le producer — mais on l'inclut ici pour
+#  que le driver PySpark puisse aussi en avoir besoin si besoin)
+RUN pip install --no-cache-dir kafka-python==2.0.2
+
+# Copier le script de démarrage
+COPY start-spark.sh /opt/start-spark.sh
+RUN chmod +x /opt/start-spark.sh
+
+ENTRYPOINT ["/opt/start-spark.sh"]

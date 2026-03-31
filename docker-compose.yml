@@ -1,0 +1,146 @@
+version: "3.8"
+
+# Stack complète : Kafka (KRaft), Spark standalone (1 master + 2 workers),
+# 2 producteurs radar, dashboard Streamlit.
+#
+# Toutes les images sont 100% gratuites et open source :
+#   Kafka  -> apache/kafka
+#   Spark  -> build local depuis spark:python3 (Docker Official Image)
+#   Python -> python:3.11-slim
+
+networks:
+  traffic-net:
+    driver: bridge
+
+services:
+
+  # Kafka en mode KRaft
+  # Listeners :
+  #   PLAINTEXT://kafka:9092      <- conteneurs internes
+  #   PLAINTEXT_HOST://localhost:9094 <- hote (pour inspecter les topics)
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    hostname: kafka
+    networks: [traffic-net]
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:9094'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  spark-master:
+    build: ./spark
+    container_name: spark-master
+    hostname: spark-master
+    networks: [traffic-net]
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      SPARK_WORKLOAD: master
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
+      SPARK_DRIVER_MEMORY: 1g
+    volumes:
+      - ./spark_jobs:/opt/spark_jobs
+      - spark-checkpoints:/tmp/checkpoints
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  spark-worker-1:
+    build: ./spark
+    container_name: spark-worker-1
+    hostname: spark-worker-1
+    networks: [traffic-net]
+    environment:
+      SPARK_WORKLOAD: worker
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    volumes:
+      - ./spark_jobs:/opt/spark_jobs
+      - spark-checkpoints:/tmp/checkpoints
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+  spark-worker-2:
+    build: ./spark
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    networks: [traffic-net]
+    environment:
+      SPARK_WORKLOAD: worker
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    volumes:
+      - ./spark_jobs:/opt/spark_jobs
+      - spark-checkpoints:/tmp/checkpoints
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+  producer-radar-a:
+    build: ./producer
+    container_name: producer-radar-a
+    networks: [traffic-net]
+    environment:
+      RADAR_ID: "A"
+      KAFKA_BOOTSTRAP: "kafka:9092"
+      TOPIC: "radar_events"
+      EMIT_INTERVAL_MS: "600"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  producer-radar-b:
+    build: ./producer
+    container_name: producer-radar-b
+    networks: [traffic-net]
+    environment:
+      RADAR_ID: "B"
+      KAFKA_BOOTSTRAP: "kafka:9092"
+      TOPIC: "radar_events"
+      EMIT_INTERVAL_MS: "600"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    networks: [traffic-net]
+    ports:
+      - "8501:8501"
+    environment:
+      KAFKA_BOOTSTRAP: "kafka:9092"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+volumes:
+  spark-checkpoints:
