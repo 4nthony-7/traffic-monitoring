@@ -1,93 +1,105 @@
-# 🚦 Highway Speed Control — Spark Structured Streaming Demo
+# Highway Speed Control — Spark Structured Streaming
 
-Démonstration d'**Apache Spark Structured Streaming** appliquée à un
-contrôle automatisé de vitesse sur autoroute : deux radars séparés de 5 km
-détectent les mêmes véhicules ; Spark joint les deux flux en temps réel,
-calcule la vitesse moyenne et déclenche une alerte pour tout dépassement du
-seuil légal.
+A **Apache Spark Structured Streaming** demo applied to automated highway speed enforcement: 
+two radars 5 km apart detect the same vehicles; Spark joins the two streams in real time, computes 
+the average speed, and triggers an alert for any violation above the legal limit.
+
+> Built to demonstrate key Spark Structured Streaming concepts in a real-time stream processing context.
 
 ---
 
-## Stack technique
+## Tech Stack
 
-| Composant | Image / technologie | Rôle |
-|-----------|-------------------|------|
-| Kafka (KRaft) | `apache/kafka:latest` | Bus de messages |
-| Spark master + 2 workers | `spark:python3` (Docker Official) | Moteur de stream processing |
-| Producteurs radar | `python:3.11-slim` | Simulent les radars A et B |
-| Dashboard | `python:3.11-slim` + Streamlit | Visualisation temps réel |
+| Component | Image / technology | Role |
+|-----------|--------------------|------|
+| Kafka (KRaft) | `apache/kafka:latest` | Message bus |
+| Spark master + 2 workers | `spark:python3` (Docker Official) | Stream processing engine |
+| Radar producers | `python:3.11-slim` | Simulate radars A and B |
+| Dashboard | `python:3.11-slim` + Streamlit | Real-time visualisation |
 
-Toutes les images sont **open source**.
+All images are **open source** and licensed under Apache 2.0.
 
 ---
 
 ## Architecture
-
 ```
-Radar A (km 0)                                   Radar B (km 0.5)
+Radar A (km 0)                                   Radar B (km 5)
     │  {plate, radar_id:"A", ts_ms}                   │  {plate, radar_id:"B", ts_ms}
-    │                                                  │
-    └─────────────────────┐   ┌──────────────────────┘
+    │                                                 │
+    └─────────────────────┐   ┌───────────────────────┘
                           ▼   ▼
                 Kafka topic : radar_events
                             │
                     ┌───────▼────────┐
                     │   Spark job    │
                     │                │
-                    │ filter A / B   │  ← même topic, deux flux logiques
-                    │ withWatermark  │  ← tolérance aux événements tardifs
-                    │ Stream JOIN    │  ← même plaque, B après A, < 30 min
+                    │ filter A / B   │  ← same topic, two logical streams
+                    │ withWatermark  │  ← late-event tolerance
+                    │ Stream JOIN    │  ← same plate, B after A, < 30 min
                     │ speed = D / Δt │  ← 5 km / ((ts_b - ts_a) / 3 600 000)
-                    │ window(30s)    │  ← statistiques par fenêtre glissante
+                    │ window(30s)    │  ← sliding window statistics
                     └───────┬────────┘
-                ┌──────────┼──────────┐
-                ▼          ▼          ▼
-          all_vehicles  violations  traffic_stats   (topics Kafka)
-                └──────────┴──────────┘
+                ┌───────────┼──────────┐
+                ▼           ▼          ▼
+          all_vehicles  violations  traffic_stats   (Kafka output topics)
+                └───────────┴──────────┘
                             │
                     Streamlit Dashboard :8501
 ```
 
-### Concepts Spark Structured Streaming illustrés
+---
 
-|                      Concept                            |           Fonction                          |
-|-------------------------------------------------        |---------------------------------------------|
-| **lecture du flux kafka** :                             |             `readStream`                    |
-| **traduction des évènements kafka**                     |                `EVENT_SCHEMA`               |
-| **Gestion des retards** :                               |                      `withWatermark`        |
-| **Gestion des bugs** :   Checkpoint                     |                      `CHECKPOINT_DIR`        |
-| **Matchmaking sur les plaques** :                       |           `Stream–Stream JOIN`              |
-| **Windowing** :  sink `traffic_stats`                   |             `window()` + `groupBy`          |
-| **Ecriture des dataframes vers kafka**                  |                     `writeStream`           |
-|**Micro-Batching**: satisfaire les sinks                 |             `trigger()`                     |
+## Spark Structured Streaming concepts illustrated
+
+| Concept | Function / location |
+|---------|---------------------|
+| **Reading the Kafka stream** — connect to a Kafka topic as an infinite streaming DataFrame | `readStream` |
+| **Parsing Kafka events** — deserialise the JSON payload against an explicit schema | `EVENT_SCHEMA` + `from_json` |
+| **Late-event handling** — tolerate delayed events before closing a state window | `withWatermark` |
+| **Fault tolerance** — warm restart with no data loss or duplicates | `CHECKPOINT_DIR` |
+| **Plate matchmaking** — join two infinite streams with a bounded time constraint | `Stream–Stream JOIN` |
+| **Speed & fine computation** — derived columns and cascading business rules | `withColumn` + `when / otherwise` |
+| **Windowing** — time-based aggregations over 30-second tumbling windows | `window()` + `groupBy` |
+| **Writing back to Kafka** — publish results to three output topics | `writeStream` |
+| **Micro-batching** — controlled processing cadence for each sink | `trigger(processingTime=...)` |
+| **Output modes** — `append` for joins (final result), `update` for aggregations | `outputMode("append")` / `outputMode("update")` |
+| **Multiple concurrent queries** — three independent sinks running in parallel | `all_query`, `viol_query`, `stats_query` |
 
 ---
 
-## Get Started
+## Prerequisites
 
-### Prérequis
+- **Docker Desktop** ≥ 24 running (green icon in the system tray)
+- **Docker Compose** ≥ 2.20 (bundled with Docker Desktop)
+- **4 GB of RAM** minimum allocated to Docker Desktop (`Settings → Resources → Memory`)
+- Available ports: `7077`, `8080`, `8501`, `9094`
 
-- **Docker Desktop** ≥ 24 démarré et en cours d'exécution (icône verte dans la barre système)
-- **Docker Compose** ≥ 2.20 (inclus dans Docker Desktop)
-- **4 Go de RAM** minimum alloués à Docker Desktop
-  (`Settings → Resources → Memory`)
-- Ports disponibles : `7077`, `8080`, `8501`, `9094`
-
-> **Windows** : ouvrez un terminal **PowerShell** ou **Git Bash** depuis le
-> dossier `traffic-monitoring/`. Les commandes ci-dessous fonctionnent dans les deux.
+> **Windows**: use PowerShell or Git Bash from the project folder.
 
 ---
 
-### Étape 1 — Vérifier la structure des fichiers
+## Configurable parameters
 
-Assurez-vous que votre dossier ressemble exactement à ceci avant de lancer quoi que ce soit :
+| Parameter | File | Default value |
+|-----------|------|---------------|
+| Distance A → B | `job_traffic.py` + `app.py` | 3 km |
+| Speed limit | `job_traffic.py` + `app.py` | 110 km/h |
+| Late-event tolerance (watermark) | `job_traffic.py` | 15 min |
+| Join window | `job_traffic.py` | 30 min |
+| Statistics window | `job_traffic.py` | 30 s |
+| Radar emission interval | `docker-compose.yml` | 600 ms |
 
+---
+
+## Quick start
+
+### 1 — Check the file structure
 ```
 traffic-monitoring/
 ├── docker-compose.yml
 ├── spark/
 │   ├── Dockerfile
-│   └── start-spark.sh          ← LF
+│   └── start-spark.sh       ← must use LF line endings (not CRLF)
 ├── producer/
 │   ├── Dockerfile
 │   └── producer.py
@@ -100,151 +112,96 @@ traffic-monitoring/
     └── submit_job.sh
 ```
 
-> ⚠️ **Windows uniquement** — `start-spark.sh` doit être encodé en **LF** (Unix),
-> pas CRLF (Windows). Vérifiez dans VS Code : en bas à droite, l'indicateur doit
-> afficher `LF`. Si vous voyez `CRLF`, cliquez dessus et sélectionnez `LF`.
+> ⚠️ **Windows only** — `start-spark.sh` must be encoded with **LF** line endings.
+> In VS Code, check the indicator in the bottom-right corner: it should read `LF`.
+> If you see `CRLF`, click it and select `LF`.
 
----
 
-### Étape 2 — Construire et démarrer les conteneurs
-
+### 2 — Build and start the containers
 ```bash
 cd traffic-monitoring
 docker compose up -d --build
 ```
 
-La première fois, Docker télécharge les images de base (~1-2 Go) et construit
-les images custom. Cela prend **3 à 5 minutes**.
+On first run, Docker pulls ~1–2 GB of base images. Allow **3 to 5 minutes**.
 
-Attendez que Kafka soit prêt (le healthcheck peut prendre 30 secondes) :
-
+Wait until all services are ready:
 ```bash
 docker compose ps
-# Tous les services doivent afficher "healthy" ou "running"
+# All services should show "healthy" or "running"
 ```
 
----
-
-### Étape 3 — Soumettre le job Spark
-
+### 3 — Submit the Spark job
 ```bash
 # Linux / macOS / Git Bash
 chmod +x scripts/submit_job.sh
 ./scripts/submit_job.sh
-
-# PowerShell (Windows natif)
-docker exec -d spark-master /opt/spark/bin/spark-submit 
-  --master spark://spark-master:7077 
-  --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0" 
-  --conf "spark.sql.shuffle.partitions=4" 
-  --conf "spark.driver.host=spark-master" 
+```
+```powershell
+# PowerShell (native Windows)
+docker exec -d spark-master /opt/spark/bin/spark-submit `
+  --master spark://spark-master:7077 `
+  --packages "org.apache.spark:spark-sql-kafka-0-10_2.13:3.5.0" `
+  --conf "spark.sql.shuffle.partitions=4" `
+  --conf "spark.driver.host=spark-master" `
   /opt/spark_jobs/job_traffic.py
 ```
 
-> Au premier lancement, Spark télécharge le connecteur Kafka (~30 s).
-> Les lancements suivants sont quasi-instantanés (JAR mis en cache).
+> On first run, Spark downloads the Kafka connector (~30 s).
+> Subsequent runs are nearly instant (JAR cached locally).
 
----
-
-### Étape 4 — Ouvrir le dashboard
-
+### 4 — Open the dashboard
 ```
 http://localhost:8501
 ```
 
-Les premières données apparaissent **30 à 60 secondes** après le démarrage du
-job, le temps que Spark accumule des paires appariées (Radar A + Radar B pour
-la même plaque).
+The first data points appear **30 to 60 seconds** after the job is submitted,
+once Spark has accumulated its first matched pairs (Radar A + Radar B for the
+same plate).
 
----
-
-### Étape 5 — Inspecter le cluster Spark
-
+### 5 — Inspect the Spark cluster
 ```
 http://localhost:8080
 ```
 
-Vous verrez l'application `HighwaySpeedDetection` avec ses 3 streaming queries
-actives : `all_vehicles`, `violations`, `traffic_stats`.
+You will see the `HighwaySpeedDetection` application with its three active
+streaming queries: `all_vehicles`, `violations`, `traffic_stats`.
 
----
-
-### Arrêter le projet
-
+### Stopping the project
 ```bash
-docker compose down          # arrête les conteneurs, conserve les volumes
-docker compose down -v       # arrête et supprime les checkpoints Spark
+docker compose down          # stop containers, keep checkpoints
+docker compose down -v       # stop and delete Spark checkpoints
 ```
 
 ---
 
-## Commandes utiles
-
+## Useful commands
 ```bash
-# Suivre les logs de tous les services
+# Follow logs for all services
 docker compose logs -f
 
-# Suivre uniquement Kafka
+# Follow Kafka logs only
 docker compose logs -f kafka
 
-# Suivre le master Spark
-docker logs -f spark-master
-
-# Voir les événements bruts (radars A et B)
+# Watch raw radar events (both A and B)
 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic radar_events
 
-# Voir les violations en temps réel
+# Watch violations in real time
 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic violations
 
-# Lister tous les topics Kafka
+# List all Kafka topics
 docker exec kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 --list
 ```
 
 ---
 
-## Paramètres
+## License
 
-| Paramètre | Fichier | Valeur par défaut |
-|-----------|---------|-------------------|
-| Distance A → B | `job_traffic.py` + `dashboard/app.py` | 5 km |
-| Limite de vitesse | `job_traffic.py` + `dashboard/app.py` | 110 km/h |
-| Tolérance retard (watermark) | `job_traffic.py` | 15 min |
-| Fenêtre de join | `job_traffic.py` | 30 min |
-| Fenêtre statistiques | `job_traffic.py` | 30 s |
-| Intervalle d'émission radar | `docker-compose.yml` | 800 ms |
+This project is released under the **MIT License** — see [`LICENSE`](LICENSE).
 
----
-
-## Dépannage
-
-**`path "spark" not found` au moment du build**
-→ Le dossier `spark/` avec son `Dockerfile` et `start-spark.sh` est manquant.
-Vérifiez la structure à l'Étape 1.
-
-**Aucune donnée dans le dashboard après 2 minutes**
-→ Vérifiez que le job tourne : `docker logs spark-master` doit mentionner
-`HighwaySpeedDetection`. Le join stream–stream n'émet qu'une fois qu'une
-paire A + B est appariée — attendez ~60 s après la soumission du job.
-
-**Le job échoue à télécharger le JAR Kafka**
-→ La première exécution requiert un accès internet depuis le conteneur.
-Vérifiez que Docker Desktop a accès au réseau
-(`Settings → Resources → Network`).
-
-**Conflit sur le port 8080**
-→ Un autre service (Jenkins, etc.) occupe ce port. Dans `docker-compose.yml`,
-changez `"8080:8080"` en `"18080:8080"` et accédez à l'UI sur `:18080`.
-
-**`start-spark.sh` : erreur `/bin/bash^M : bad interpreter`**
-→ Le fichier a des fins de ligne Windows (CRLF). Ouvrez-le dans VS Code,
-cliquez sur `CRLF` en bas à droite, sélectionnez `LF`, sauvegardez,
-puis relancez `docker compose up -d --build`.
-
-
-**Checkpoint:** : `CHECKPOINT_DIR`
-Chaque fois qu'un micro-batch est terminé, Spark écrit deux choses vitales sur le disque :
-Les Offsets : "J'ai lu Kafka jusqu'au message n°4500".
-L'État (State) : "Je garde en mémoire que la plaque AB-123 est passée au Radar A mais j'attends encore le B".
+Dependencies (Apache Spark, Apache Kafka, Streamlit) are distributed under
+their own licenses (Apache License 2.0 for Spark and Kafka, Apache License 2.0
+for Streamlit). This project does not redistribute any of these components.
