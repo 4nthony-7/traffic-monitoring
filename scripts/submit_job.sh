@@ -1,5 +1,5 @@
 #!/bin/bash
-# submit_job.sh – soumettre le job Spark au cluster
+# submit_job.sh – submit job_traffic.py to Spark master
 
 set -e
 

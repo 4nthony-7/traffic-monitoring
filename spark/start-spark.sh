@@ -1,7 +1,6 @@
 #!/bin/bash
 # start-spark.sh
-# Démarre le nœud Spark en master ou worker selon SPARK_WORKLOAD.
-# Compatible avec l'image officielle spark:3.5.x-*-python3-*.
+# Starts the Spark node as a master or worker depending on SPARK_WORKLOAD.
  
 . "${SPARK_HOME}/bin/load-spark-env.sh"
  

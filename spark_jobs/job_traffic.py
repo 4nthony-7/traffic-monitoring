@@ -1,62 +1,40 @@
+#!/usr/bin/env python3
+__author__ = "Anthony Poher"
+__date__ = "2026-04-07"
+
 """
-Spark Structured Streaming – Traffic Speed Detection
-=====================================================
-
-One Kafka topic `radar_events` carries events from BOTH radars:
-
-  { "plate": "AB-123-CD", "radar_id": "A", "ts_ms": 1711234567000 }
-  { "plate": "AB-123-CD", "radar_id": "B", "ts_ms": 1711234599000 }
-
-This job:
-  1. Reads the stream and splits it into two logical streams: A and B.
-  2. Applies withWatermark() on each side to handle late data.
-  3. Performs a Stream–Stream JOIN: matches the same plate seen by A then B
-     within a bounded time window.
-  4. Computes average speed: DISTANCE_KM / ((ts_b - ts_a) / 3_600_000)
-  5. Flags violations (speed > SPEED_LIMIT).
-  6. Computes per-30-second windowed statistics (count, avg/max speed).
-  7. Writes results to two output topics: `violations` and `traffic_stats`.
-
-Key Structured Streaming concepts shown
-----------------------------------------
-  readStream              – consume an unbounded Kafka topic
-  StructType / from_json  – parse JSON payloads with a schema
-  withWatermark           – tell Spark how late events can arrive
-  Stream–Stream JOIN      – join two streams on a key + time constraint
-  window() + groupBy      – tumbling window aggregations
-  outputMode("append")    – for joins and flat maps
-  outputMode("update")    – for aggregations
-  trigger(processingTime) – micro-batch cadence
-  writeStream to Kafka    – publish results back to Kafka
-
-Usage (from inside spark-master container)
--------------------------------------------
-  spark-submit \
-    --master spark://spark-master:7077 \
-    --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0" \
-    /opt/spark_jobs/job_traffic.py
+Job Traffic: Spark Structured Streaming job to detect vehicles
+----------------------------------------------------------------------------------
+This script implements a Spark Structured Streaming job that :
+  --> reads radar events from a Kafka topic : "radar_events",
+  --> performs stream-stream joins to match radar A and B detections,
+  --> computes average speed and flags violations
+  --> writes results to three Kafka topics:
+                            - 'all_vehicles'
+                            - 'violations'
+                            - 'traffic_stats' (30s windowed counts)
+----------------------------------------------------------------------------------
+Usage:
+        --> docker exec spark-master /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0" \
+                /opt/spark_jobs/job_traffic.py
 """
+
 
 import time
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    col, from_json, to_json, struct, lit,
-    window, count, avg, max as spark_max,
-    when, expr, round as spark_round,
-    from_unixtime
-)
-from pyspark.sql.types import (
-    StructType, StructField, StringType, LongType
-)
+from pyspark.sql.types import (StructType, StructField, StringType, LongType)
+from pyspark.sql.functions import (col, from_json, to_json, struct, lit,
+                                window, count, avg, when, expr, round as spark_round)
+
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-DISTANCE_KM     = 3.0     # physical distance between Radar A and Radar B
-SPEED_LIMIT     = 110.0   # km/h
+DISTANCE_KM     = 3.0
+SPEED_LIMIT     = 110.0
 KAFKA_BOOTSTRAP = "kafka:9092"
 INPUT_TOPIC     = "radar_events"
 CHECKPOINT_DIR  = "/tmp/checkpoints/traffic"
-
-# ── Event schema ───────────────────────────────────────────────────────────────
 EVENT_SCHEMA = StructType([
     StructField("plate",    StringType(), False),
     StructField("radar_id", StringType(), False),
@@ -64,7 +42,13 @@ EVENT_SCHEMA = StructType([
 ])
 
 
+# ── Functions ──────────────────────────────────────────────────────────────────
 def create_session() -> SparkSession:
+    """
+    Create and configure the SparkSession for our streaming job.
+     --> Kafka package : org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
+     --> shuffle partitions : 4 (enough for our local demo)
+    """
     return (
         SparkSession.builder
         .appName("HighwaySpeedDetection")
@@ -73,7 +57,6 @@ def create_session() -> SparkSession:
             "spark.jars.packages",
             "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
         )
-        # Fewer shuffle partitions for a local demo (default 200 is too many)
         .config("spark.sql.shuffle.partitions", "4")
         .getOrCreate()
     )
@@ -83,7 +66,7 @@ def read_radar_stream(spark: SparkSession):
     """
     Read the raw Kafka stream and parse the JSON payload.
     Returns a DataFrame with columns: plate, radar_id, ts_ms, event_time
-    where event_time is a proper Timestamp derived from ts_ms.
+                where event_time is a proper Timestamp derived from ts_ms.
     """
     raw = (
         spark.readStream
@@ -111,19 +94,21 @@ def read_radar_stream(spark: SparkSession):
 
 
 def main():
+    """
+    Main functionnalities:
+        --> withWatermark : Spark will wait up to 15 min for late events
+        --> window : 30s tumbling windows for traffic stats
+        --> trigger(processingTime) : micro-batch cadence of 5s for joins, 15s for stats
+    """
     spark = create_session()
     spark.sparkContext.setLogLevel("WARN")
 
     events = read_radar_stream(spark)
 
-    # ── 1. Split into two logical streams ─────────────────────────────────────
-    # Both still read from the same physical stream; we just filter differently.
-
+    # ──── Split into two logical streams ─────────────────────────────────────
     stream_a = (
         events
         .filter(col("radar_id") == "A")
-        # withWatermark: Spark will wait up to 15 min for late A-events
-        # before it considers a time window "complete" and eligible for joining.
         .withWatermark("event_time", "15 minutes")
         .select(
             col("plate").alias("plate_a"),
@@ -143,14 +128,11 @@ def main():
         )
     )
 
-    # ── 2. Stream–Stream JOIN ──────────────────────────────────────────────────
+    # ──── Stream–Stream JOIN ────────────────────────────────────────────────────
     # Constraints:
-    #   • Same plate
-    #   • B must arrive AFTER A  (can't go backward)
-    #   • B must arrive within 30 minutes of A  (no vehicle takes longer at ≥10 km/h)
-    #
-    # Spark keeps state (buffered rows) for both sides until the watermarks
-    # allow it to safely close a window and emit (or discard) the join result.
+    #   - Same plate
+    #   - B must arrive AFTER A
+    #   - B must arrive within 30 minutes of A
     joined = stream_a.join(
         stream_b,
         expr("""
@@ -161,7 +143,7 @@ def main():
         how="inner",
     )
 
-    # ── 3. Compute speed and classify violation ────────────────────────────────
+    # ──── Compute speed and classify violation ────────────────────────────────
     results = (
         joined
         .withColumn("plate", col("plate_a"))
@@ -170,7 +152,7 @@ def main():
             "delta_t_h",
             (col("ts_ms_b") - col("ts_ms_a")).cast("double") / 3_600_000.0,
         )
-        # avg_speed = distance / time
+        # speed = distance / time
         .withColumn(
             "avg_speed_kmh",
             spark_round(lit(DISTANCE_KM) / col("delta_t_h"), 1),
@@ -182,7 +164,7 @@ def main():
                  spark_round(col("avg_speed_kmh") - SPEED_LIMIT, 1))
             .otherwise(lit(0.0)),
         )
-        # Fine schedule (French scale, simplified)
+        # Fine schedule
         .withColumn(
             "fine_eur",
             when(col("excess_kmh") > 50,  lit(1500))
@@ -196,7 +178,7 @@ def main():
         .filter(col("delta_t_h") > 0)
     )
 
-    # ── 4. Sink A: all detections → `all_vehicles` topic ─────────────────────
+    # ──── Sink: 'all_vehicles' ─────────────────────────────────────────────────
     all_query = (
         results
         .select(
@@ -218,7 +200,7 @@ def main():
     )
     time.sleep(3)
 
-    # ── 5. Sink B: violations only → `violations` topic ──────────────────────
+    # ──── Sink: 'violations' ───────────────────────────────────────────────────
     viol_query = (
         results
         .filter(col("violation"))
@@ -241,9 +223,7 @@ def main():
     )
     time.sleep(3)
 
-    # ── 6. Sink C: 30-second tumbling window stats → `traffic_stats` topic ───
-    # This uses a SEPARATE stream (re-read events) because window aggregations
-    # require outputMode("update") which is incompatible with the join sink above.
+    # ──── Sink: 'traffic stats' ───────────────────────────────────────────────────
     events2 = read_radar_stream(spark).filter(col("radar_id") == "A")
 
     stats_query = (

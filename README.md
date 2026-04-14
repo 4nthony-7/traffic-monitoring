@@ -1,7 +1,7 @@
 # Highway Speed Control — Spark Structured Streaming
 
 A **Apache Spark Structured Streaming** demo applied to automated highway speed enforcement: 
-two radars 5 km apart detect the same vehicles; Spark joins the two streams in real time, computes 
+two radars 3 km apart detect the same vehicles; Spark joins the two streams in real time, computes 
 the average speed, and triggers an alert for any violation above the legal limit.
 
 > Built to demonstrate key Spark Structured Streaming concepts in a real-time stream processing context.
@@ -33,18 +33,21 @@ Radar A (km 0)                                   Radar B (km 5)
                     ┌───────▼────────┐
                     │   Spark job    │
                     │                │
-                    │ filter A / B   │  ← same topic, two logical streams
-                    │ withWatermark  │  ← late-event tolerance
-                    │ Stream JOIN    │  ← same plate, B after A, < 30 min
-                    │ speed = D / Δt │  ← 5 km / ((ts_b - ts_a) / 3 600 000)
-                    │ window(30s)    │  ← sliding window statistics
+                    │ filter A / B   │
+                    │ withWatermark  │
+                    │ Stream JOIN    │
+                    │ speed = D / Δt │
+                    │ window(30s)    │
                     └───────┬────────┘
+                            |
+                    Kafka output topics
+                            |
                 ┌───────────┼──────────┐
                 ▼           ▼          ▼
-          all_vehicles  violations  traffic_stats   (Kafka output topics)
+          all_vehicles  violations  traffic_stats
                 └───────────┴──────────┘
                             │
-                    Streamlit Dashboard :8501
+                  Streamlit Dashboard
 ```
 
 ---
@@ -105,7 +108,8 @@ traffic-monitoring/
 │   └── producer.py
 ├── dashboard/
 │   ├── Dockerfile
-│   └── app.py
+│   ├── app.py
+│   └── style.css
 ├── spark_jobs/
 │   └── job_traffic.py
 └── scripts/
@@ -200,7 +204,7 @@ docker exec kafka /opt/kafka/bin/kafka-topics.sh \
 
 ## License
 
-This project is released under the **MIT License** — see [`LICENSE`](LICENSE).
+This project is released under the **MIT License**.
 
 Dependencies (Apache Spark, Apache Kafka, Streamlit) are distributed under
 their own licenses (Apache License 2.0 for Spark and Kafka, Apache License 2.0

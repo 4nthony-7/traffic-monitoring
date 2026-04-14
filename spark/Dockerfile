@@ -1,7 +1,5 @@
-# Image de base : Docker Official Image — Spark avec Python 3
+# Base image: Docker Official Image — Spark with Python 3
 # https://hub.docker.com/_/spark
-# Le tag "python3" est le alias stable maintenu par Apache/Docker qui pointe
-# vers la dernière version 3.x avec support Python.
 
 FROM spark:3.5.3-scala2.12-java11-python3-ubuntu
 

@@ -6,9 +6,9 @@ RUN pip install --no-cache-dir \
     pandas==2.2.2 \
     altair==5.3.0
 COPY app.py .
+COPY style.css .
 EXPOSE 8501
 CMD ["streamlit", "run", "app.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0", \
      "--server.headless=true"]
- 

@@ -1,0 +1,193 @@
+/* style.css */
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Base */
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #0a0a0f;
+    color: #e2e2e8;
+    font-family: 'DM Sans', sans-serif;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: #0f0f17;
+    border-right: 1px solid #1e1e2e;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 2rem;
+}
+
+/* Hide default streamlit elements */
+#MainMenu, footer, header { visibility: hidden; }
+[data-testid="stToolbar"] { display: none; }
+
+/* Header */
+.dash-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    padding: 0.5rem 0 2rem 0;
+    border-bottom: 1px solid #1e1e2e;
+    margin-bottom: 2rem;
+}
+.dash-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #e2e2e8;
+    margin: 0;
+}
+.dash-subtitle {
+    font-size: 0.75rem;
+    color: #4a4a6a;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.live-dot {
+    width: 7px;
+    height: 7px;
+    background: #00ff88;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.4rem;
+    animation: pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 8px #00ff88;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* KPI Cards */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: #1e1e2e;
+    border: 1px solid #1e1e2e;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+.kpi-card {
+    background: #0f0f17;
+    padding: 1.4rem 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.kpi-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #4a4a6a;
+    font-family: 'Space Mono', monospace;
+}
+.kpi-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #e2e2e8;
+    line-height: 1;
+}
+.kpi-value.accent { color: #ff4466; }
+.kpi-value.green  { color: #00ff88; }
+.kpi-delta {
+    font-size: 0.7rem;
+    color: #4a4a6a;
+    font-family: 'Space Mono', monospace;
+}
+
+/* Section labels */
+.section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8888aa;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #1e1e2e;
+}
+
+/* Violation badge */
+.viol-row { border-left: 2px solid #ff4466 !important; }
+.ok-row   { border-left: 2px solid #00ff88 !important; }
+
+/* Sidebar stats */
+.stat-item {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid #1e1e2e;
+}
+.stat-item:last-child { border-bottom: none; }
+.stat-name {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #4a4a6a;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 0.2rem;
+}
+.stat-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.95rem;
+    color: #e2e2e8;
+}
+.stat-val.red { color: #ff4466; }
+.stat-val.green { color: #00ff88; }
+
+/* Dataframe overrides */
+[data-testid="stDataFrame"] {
+    border: 1px solid #1e1e2e !important;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.stDataFrame thead tr th {
+    background-color: #0f0f17 !important;
+    color: #4a4a6a !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 0.65rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    border-bottom: 1px solid #1e1e2e !important;
+}
+.stDataFrame tbody tr td {
+    background-color: #0a0a0f !important;
+    color: #c2c2d0 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.82rem !important;
+    border-bottom: 1px solid #12121e !important;
+}
+.stDataFrame tbody tr:hover td {
+    background-color: #0f0f1a !important;
+}
+
+/* Info box */
+.info-box {
+    background: #0f0f17;
+    border: 1px solid #1e1e2e;
+    border-left: 3px solid #4a4a6a;
+    border-radius: 4px;
+    padding: 0.9rem 1rem;
+    font-size: 0.8rem;
+    color: #4a4a6a;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.03em;
+}
+
+/* Speed bar */
+.speed-bar-wrap {
+    background: #1e1e2e;
+    border-radius: 2px;
+    height: 3px;
+    margin-top: 0.4rem;
+    overflow: hidden;
+}
+.speed-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}

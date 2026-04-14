@@ -1,12 +1,10 @@
 version: "3.8"
 
-# Stack complète : Kafka (KRaft), Spark standalone (1 master + 2 workers),
-# 2 producteurs radar, dashboard Streamlit.
-#
-# Toutes les images sont 100% gratuites et open source :
-#   Kafka  -> apache/kafka
-#   Spark  -> build local depuis spark:python3 (Docker Official Image)
-#   Python -> python:3.11-slim
+# Stack: 
+#                 - Kafka (KRaft)
+#                 - Spark standalone (1 master + 2 workers),
+#                 - producer simulating radar events,
+#                 - dashboard Streamlit.
 
 networks:
   traffic-net:
@@ -14,10 +12,10 @@ networks:
 
 services:
 
-  # Kafka en mode KRaft
-  # Listeners :
-  #   PLAINTEXT://kafka:9092      <- conteneurs internes
-  #   PLAINTEXT_HOST://localhost:9094 <- hote (pour inspecter les topics)
+  # Kafka with KRaft mode:
+  # Listeners:
+  #   PLAINTEXT://kafka:9092          <- internal (producers, Spark)
+  #   PLAINTEXT_HOST://localhost:9094 <- host (topics inspect, debug)
   kafka:
     image: apache/kafka:3.9.0
     container_name: kafka
@@ -104,28 +102,15 @@ services:
       spark-master:
         condition: service_healthy
 
-  producer-radar-a:
+  producer-radar:
     build: ./producer
-    container_name: producer-radar-a
+    container_name: producer-radar
     networks: [traffic-net]
     environment:
       RADAR_ID: "A"
       KAFKA_BOOTSTRAP: "kafka:9092"
       TOPIC: "radar_events"
-      EMIT_INTERVAL_MS: "600"
-    depends_on:
-      kafka:
-        condition: service_healthy
-
-  producer-radar-b:
-    build: ./producer
-    container_name: producer-radar-b
-    networks: [traffic-net]
-    environment:
-      RADAR_ID: "B"
-      KAFKA_BOOTSTRAP: "kafka:9092"
-      TOPIC: "radar_events"
-      EMIT_INTERVAL_MS: "600"
+      EMIT_INTERVAL_MS: "800"
     depends_on:
       kafka:
         condition: service_healthy
