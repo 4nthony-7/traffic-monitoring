@@ -4,6 +4,8 @@ A **Apache Spark Structured Streaming** demo applied to automated highway speed 
 two radars 3 km apart detect the same vehicles; Spark joins the two streams in real time, computes 
 the average speed, and triggers an alert for any violation above the legal limit.
 
+![Texte alternatif](schema.png)
+
 > Built to demonstrate key Spark Structured Streaming concepts in a real-time stream processing context.
 
 ---
@@ -96,13 +98,13 @@ Radar A (km 0)                                   Radar B (km 5)
 
 ## Quick start
 
-### 1 — Check the file structure
+### 1 — Architecture Review
 ```
 traffic-monitoring/
 ├── docker-compose.yml
 ├── spark/
 │   ├── Dockerfile
-│   └── start-spark.sh       ← must use LF line endings (not CRLF)
+│   └── start-spark.sh
 ├── producer/
 │   ├── Dockerfile
 │   └── producer.py
@@ -117,8 +119,6 @@ traffic-monitoring/
 ```
 
 > ⚠️ **Windows only** — `start-spark.sh` must be encoded with **LF** line endings.
-> In VS Code, check the indicator in the bottom-right corner: it should read `LF`.
-> If you see `CRLF`, click it and select `LF`.
 
 
 ### 2 — Build and start the containers
